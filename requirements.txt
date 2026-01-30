@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+psycopg2-binary
+SQLAlchemy
+langchain
+langgraph
+langchain-community
+ollama
+requests
+pgvector
+fastembed-langchain
+fastembed
+nomic

@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: pgvector
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=vectordb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - ollama
+    environment:
+      - DATABASE_URL=postgresql://user:password@pgvector/vectordb
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - API_URL=https://fakestoreapi.com/products # Example API
+    volumes:
+      - ./app:/app
+
+volumes:
+  postgres_data:
+  ollama_data:
