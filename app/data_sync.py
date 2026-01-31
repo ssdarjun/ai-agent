@@ -1,69 +1,92 @@
-
 import os
-import requests
-from sqlalchemy import create_engine, text
+import httpx
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.sql import text
+from sqlalchemy import Table, Column, MetaData, Integer, Text, Float, event
 from pgvector.sqlalchemy import Vector
-from langchain_community.embeddings import OllamaEmbeddings
+from pgvector.psycopg import register_vector_async
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from langchain_ollama import OllamaEmbeddings
+import asyncio
 
 # --- Database and API Configuration ---
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://user:password@localhost/vectordb")
-API_URL = os.environ.get("API_URL", "https://fakestoreapi.com/products")
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+DB_USER = os.environ.get("POSTGRES_USER", "user")
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "password")
+DB_HOST = "pgvector"
+DB_NAME = os.environ.get("POSTGRES_DB", "vectordb")
+DATABASE_URL = f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}"
 
-engine = create_engine(DATABASE_URL)
+API_URL = os.environ.get("API_URL")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL")
+
+engine = create_async_engine(DATABASE_URL)
+
+# --- Register Vector Type with Psycopg ---
+@event.listens_for(engine.sync_engine, "connect")
+def _sqla_on_connect(dbapi_connection, connection_record):
+    dbapi_connection.run_async(register_vector_async)
+
 embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_BASE_URL)
 
-def create_table():
+# --- SQLAlchemy Table Definition ---
+metadata = MetaData()
+products_table = Table(
+    'products',
+    metadata,
+    Column('id', Integer, primary_key=True, autoincrement=False),
+    Column('title', Text),
+    Column('price', Float),
+    Column('description', Text),
+    Column('category', Text),
+    Column('image', Text),
+    Column('embedding', Vector(768))
+)
+
+async def create_table():
     """Creates the 'products' table with a vector column if it doesn't exist."""
-    with engine.connect() as connection:
-        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        connection.execute(text("""
-            CREATE TABLE IF NOT EXISTS products (
-                id SERIAL PRIMARY KEY,
-                title TEXT,
-                price FLOAT,
-                description TEXT,
-                category TEXT,
-                image TEXT,
-                embedding VECTOR(768)
-            )
-        """))
-        connection.commit()
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.run_sync(metadata.create_all, checkfirst=True)
 
-def sync_data():
+async def sync_data():
     """Fetches data from the API, generates embeddings, and upserts into the database."""
-    response = requests.get(API_URL)
-    products = response.json()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(API_URL)
+        response.raise_for_status()
+        products = response.json()
 
-    with engine.connect() as connection:
+    async with engine.begin() as conn:
         for product in products:
-            # Combine title and description for a richer embedding
             content_to_embed = f"{product['title']}: {product['description']}"
-            
-            # Generate embedding
-            vector = embeddings.embed_query(content_to_embed)
+            vector = await embeddings.aembed_query(content_to_embed)
 
-            # Upsert logic (simple version: delete and insert)
-            # A more robust solution would use ON CONFLICT DO UPDATE
-            connection.execute(text("DELETE FROM products WHERE id = :id"), {"id": product['id']})
-            connection.execute(
-                text("""
-                    INSERT INTO products (id, title, price, description, category, image, embedding)
-                    VALUES (:id, :title, :price, :description, :category, :image, :embedding)
-                """),
-                {
-                    "id": product['id'],
-                    "title": product['title'],
-                    "price": product['price'],
-                    "description": product['description'],
-                    "category": product['category'],
-                    "image": product['image'],
-                    "embedding": vector,
+            stmt = pg_insert(products_table).values(
+                id=product['id'],
+                title=product['title'],
+                price=product['price'],
+                description=product['description'],
+                category=product['category'],
+                image=product['image'],
+                embedding=vector # Pass the list directly
+            )
+            
+            upsert_stmt = stmt.on_conflict_do_update(
+                index_elements=['id'],
+                set_={
+                    'title': stmt.excluded.title,
+                    'price': stmt.excluded.price,
+                    'description': stmt.excluded.description,
+                    'category': stmt.excluded.category,
+                    'image': stmt.excluded.image,
+                    'embedding': stmt.excluded.embedding,
                 }
             )
-        connection.commit()
+            await conn.execute(upsert_stmt)
+            
     print("Data synchronization complete.")
 
 if __name__ == "__main__":
-    create_table()
-    sync_data()
+    async def main():
+        await create_table()
+        await sync_data()
+    asyncio.run(main())

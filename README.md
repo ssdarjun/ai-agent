@@ -19,7 +19,7 @@ This project is a middleware AI agent that synchronizes product data from a JSON
    Open a terminal in the project's root directory and run:
 
    ```bash
-   docker-compose up -d --build
+   docker compose up -d --build
    ```
 
    This command will build the backend image and start the `postgres`, `ollama`, and `backend` services.

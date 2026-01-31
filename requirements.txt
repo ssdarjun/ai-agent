@@ -8,6 +8,6 @@ langchain-community
 ollama
 requests
 pgvector
-fastembed-langchain
-fastembed
-nomic
+psycopg[binary]
+httpx
+langchain-ollama
