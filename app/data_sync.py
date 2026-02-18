@@ -85,8 +85,18 @@ async def sync_data():
             
     print("Data synchronization complete.")
 
+async def get_data():
+    """Retrieves all data from the 'products' table."""
+    async with engine.connect() as conn:
+        result = await conn.execute(text("SELECT id, title, price, description, category, image FROM products"))
+        products = result.fetchall()
+        return [dict(zip(result.keys(), product)) for product in products]
+    print("Data retrieval complete.")
+
+
 if __name__ == "__main__":
     async def main():
         await create_table()
         await sync_data()
+        await get_data()
     asyncio.run(main())

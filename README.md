@@ -28,7 +28,7 @@ This project is a middleware AI agent that synchronizes product data from a JSON
    You can check the logs of the services to make sure they are running correctly:
 
    ```bash
-   docker-compose logs -f
+   docker compose logs -f
    ```
 
 ## Data Synchronization

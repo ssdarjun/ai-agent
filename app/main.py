@@ -15,7 +15,7 @@ import json
 from pgvector.psycopg import register_vector_async
 from langchain_ollama import OllamaLLM, OllamaEmbeddings
 
-from data_sync import sync_data, create_table
+from data_sync import sync_data, create_table, get_data
 
 # --- FastAPI App Initialization ---
 app = FastAPI()
@@ -177,6 +177,11 @@ async def trigger_sync():
         return {"message": "Data synchronization started."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products")
+async def products():
+    products_data = await get_data()
+    return {"products": products_data}
 
 @app.post("/chat")
 async def chat(query: str):
