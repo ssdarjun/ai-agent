@@ -19,6 +19,13 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
+  ollama-pull:
+    image: curlimages/curl:latest
+    container_name: ollama-pull
+    depends_on:
+      - ollama
+    entrypoint: [ "sh", "-c", "until curl -s http://ollama:11434/api/tags | grep -q 'qwen2.5:7b' && curl -s http://ollama:11434/api/tags | grep -q 'nomic-embed-text'; do echo 'Waiting for models to be pulled...'; curl -s -X POST http://ollama:11434/api/pull -d '{\"name\": \"qwen2.5:7b\"}'; curl -s -X POST http://ollama:11434/api/pull -d '{\"name\": \"nomic-embed-text\"}'; sleep 5; done" ]
+
   backend:
     build:
       context: .
