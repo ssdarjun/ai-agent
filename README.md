@@ -31,6 +31,18 @@ This project is a middleware AI agent that synchronizes product data from a JSON
    docker compose logs -f
    ```
 
+2. **Clean:**
+- Removes:
+  - stopped containers
+  - unused images
+  - unused networks
+  - unused volumes
+```bash
+docker system prune -a --volumes -f
+```
+- Remove unused images
+  - `docker image prune -a`
+
 ## Data Synchronization
 
 Before you can interact with the agent, you need to synchronize the product data from the API to the database.
