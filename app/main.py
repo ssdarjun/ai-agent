@@ -1,9 +1,21 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from data_sync import sync_data, create_table, get_data
 from chat import router as chat_router
 
 # --- FastAPI App Initialization ---
 app = FastAPI()
+
+# --- CORS Middleware ---
+# This is to allow the frontend to make requests to the backend.
+# For production, it's better to restrict the origins to the frontend's domain.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # --- Include Chat Router ---
 app.include_router(chat_router)
