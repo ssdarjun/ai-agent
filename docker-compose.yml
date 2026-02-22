@@ -43,6 +43,18 @@ services:
     volumes:
       - ./app:/app
 
+  frontend:
+    build:
+      context: ./ai-agent-frontend
+    container_name: frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./ai-agent-frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   ollama_data:
