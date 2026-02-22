@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from data_sync import sync_data, create_table, get_data
+from data_sync import sync_data, create_table, get_data, get_orders
 from chat import router as chat_router
 
 # --- FastAPI App Initialization ---
@@ -35,6 +35,11 @@ async def trigger_sync():
 async def products():
     products_data = await get_data()
     return {"products": products_data}
+
+@app.get("/orders")
+async def orders():
+    orders_data = await get_orders()
+    return {"orders": orders_data}
 
 @app.get("/")
 async def read_root():

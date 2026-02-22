@@ -15,12 +15,7 @@ const Navbar = () => {
             <Link to="/products" className="text-gray-700 hover:text-blue-600 transition-colors">Products</Link>
           </li>
           <li>
-            <a href="#" className="text-gray-700 hover:text-blue-600 transition-colors">Categories</a>
-          </li>
-          <li>
-            <button className="bg-blue-600 text-white px-5 py-2 rounded-full hover:bg-blue-700 transition-shadow shadow-sm">
-              Login
-            </button>
+            <Link to="/orders" className="text-gray-700 hover:text-blue-600 transition-colors">Orders</Link>
           </li>
         </ul>
         {/* Mobile menu toggle (simplified for now) */}

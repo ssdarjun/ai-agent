@@ -14,7 +14,7 @@ from sqlalchemy.sql import text
 # NEW: Use the standard ChatOllama class
 from langchain_ollama import ChatOllama 
 
-from data_sync import engine, embeddings
+from data_sync import engine, embeddings, orders_table
 
 router = APIRouter()
 
@@ -42,22 +42,45 @@ class CreateOrder(BaseModel):
 # Bind tools to the LLM
 llm_with_tools = llm.bind_tools(tools=[CheckStock, CreateOrder])
 
-def check_stock(product_id: int):
-    """Checks the stock for a given product ID."""
+async def check_stock(product_id: int):
+    """Checks the stock for a given product ID by querying the database."""
     print(f"Checking stock for product ID: {product_id}")
-    return {"product_id": product_id, "stock": 100}
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT stock_quantity FROM products WHERE id = :id"),
+            {"id": product_id}
+        )
+        row = result.fetchone()
+        if row:
+            return {"product_id": product_id, "stock": row[0]}
+    return {"product_id": product_id, "error": "Product not found"}
 
-def create_order(product_id: int, quantity: int, customer_phone: str, address: str):
-    """Creates an order for a given product."""
-    print(f"Creating order for product ID: {product_id}, quantity: {quantity}, customer: {customer_phone}, address: {address}")
-    return {"order_id": f"ORD{uuid.uuid4().hex[:8].upper()}", "status": "success"}
+async def create_order(product_id: int, quantity: int, customer_phone: str, address: str):
+    """Creates an order for a given product and stores it in the database."""
+    print(f"Creating order for product ID: {product_id}, quantity: {quantity}")
+    order_id = f"ORD{uuid.uuid4().hex[:8].upper()}"
+    
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                orders_table.insert().values(
+                    id=order_id,
+                    product_id=product_id,
+                    quantity=quantity,
+                    customer_phone=customer_phone,
+                    address=address,
+                    status='pending'
+                )
+            )
+        return {"order_id": order_id, "status": "success", "message": "Order created successfully"}
+    except Exception as e:
+        print(f"Error creating order: {e}")
+        return {"status": "error", "message": str(e)}
 
 tool_map = {
-    "CheckStock": lambda **args: check_stock(**args),
-    "CreateOrder": lambda **args: create_order(**args),
+    "CheckStock": check_stock,
+    "CreateOrder": create_order,
 }
-
-# (Existing tool functions check_stock and create_order remain the same...)
 
 # --- Agent State ---
 class AgentState(TypedDict):
@@ -66,35 +89,41 @@ class AgentState(TypedDict):
 # --- LangGraph Nodes ---
 
 async def retrieve(state):
-    """Retrieve relevant documents from the database."""
+    """Retrieve relevant documents from the database including IDs and stock."""
     print("---RETRIEVE NODE---")
     last_message = state['messages'][-1]
     if not isinstance(last_message, HumanMessage):
         return {}
-        
+    
     query_embedding = await embeddings.aembed_query(last_message.content)
 
     async with engine.connect() as conn:
         result = await conn.execute(
-            text("SELECT title, description FROM products ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT 3"),
+            text("SELECT id, title, description, stock_quantity FROM products ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT 20"),
             {"embedding": query_embedding}
         )
-        retrieved_docs = "\n".join([f"Title: {row[0]}\nDescription: {row[1]}" for row in result.fetchall()])
+        rows = result.fetchall()
+        if not rows:
+            return {}
+        retrieved_docs = "\n".join([f"ID: {row[0]}, Title: {row[1]}, Stock: {row[3]}, Description: {row[2][:100]}..." for row in rows])
     
-    if retrieved_docs:
-        return {"messages": [SystemMessage(content=f"Context for decision making:\n{retrieved_docs}")]}
-    return {}
+    return {"messages": [SystemMessage(content=f"Available products in this context:\n{retrieved_docs}")]}
 
 async def agent(state):
     """Invoke the LLM with the current state."""
     print("---AGENT NODE---")
     system_prompt = (
-        "You are an e-commerce assistant. Use tools to check stock or create orders. "
-        "If context is provided, use it to find product IDs. Always use tool_calls for actions."
+        "You are a professional e-commerce assistant for MyStore. "
+        "Your goal is to help users check stock and place orders efficiently. "
+        "\n\nGUIDELINES:"
+        "\n1. MEMORY: Always refer to previous messages to remember which product the user is interested in. "
+        "If the user says 'place an order' or 'buy it' after you just checked stock for a product, use that product's ID automatically. "
+        "\n2. PRODUCT IDs: Always use numeric IDs for tools. Resolve names to IDs using the provided context. "
+        "\n3. CLARITY: If the user hasn't specified quantity, phone, or address for an order, ask for them politely. "
+        "\n4. CONTEXT: Use the 'Available products' context to find details, but prioritize what was discussed in history."
     )
     messages = [SystemMessage(content=system_prompt)] + state["messages"]
     
-    # Native tool calling handles the JSON parsing internally
     response = await llm_with_tools.ainvoke(messages)
     return {"messages": [response]}
 
@@ -104,15 +133,13 @@ async def tool_executor(state):
     last_message = state['messages'][-1]
     
     responses = []
-    # ChatOllama populates .tool_calls automatically
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         args = tool_call["args"]
         
-        # Handle Qwen's potential naming case sensitivity
         func = tool_map.get(tool_name)
         if func:
-            result = func(**args)
+            result = await func(**args)
             responses.append(ToolMessage(
                 content=json.dumps(result), 
                 tool_call_id=tool_call["id"]

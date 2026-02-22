@@ -24,7 +24,7 @@ const Product = ({ product }) => {
             {product.category || 'Featured'}
           </span>
         </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2 line-clamp-1 group-hover:text-blue-600 transition-colors">
+        <h3 className="text-lg font-bold text-gray-800 mb-2 line-clamp- group-hover:text-blue-600 transition-colors">
           {product.title}
         </h3>
         <p className="text-gray-500 text-sm mb-4 line-clamp-2 flex-grow leading-relaxed">
@@ -35,9 +35,11 @@ const Product = ({ product }) => {
           <span className="text-2xl font-black text-gray-900">
             ${product.price}
           </span>
+          {/*
           <button className="bg-gray-900 text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-blue-600 transition-colors active:scale-95 transform">
             Add to Cart
           </button>
+          */}
         </div>
       </div>
     </div>

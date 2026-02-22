@@ -1,5 +1,6 @@
 import os
 import httpx
+import random
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.sql import text
 from sqlalchemy import Table, Column, MetaData, Integer, Text, Float, event
@@ -28,7 +29,7 @@ def _sqla_on_connect(dbapi_connection, connection_record):
 
 embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_BASE_URL)
 
-# --- SQLAlchemy Table Definition ---
+# --- SQLAlchemy Table Definitions ---
 metadata = MetaData()
 products_table = Table(
     'products',
@@ -39,14 +40,36 @@ products_table = Table(
     Column('description', Text),
     Column('category', Text),
     Column('image', Text),
+    Column('stock_quantity', Integer, default=0),
     Column('embedding', Vector(768))
 )
 
+orders_table = Table(
+    'orders',
+    metadata,
+    Column('id', Text, primary_key=True),
+    Column('product_id', Integer),
+    Column('quantity', Integer),
+    Column('customer_phone', Text),
+    Column('address', Text),
+    Column('status', Text, default='pending'),
+    Column('created_at', Text, server_default=text("CURRENT_TIMESTAMP"))
+)
+
 async def create_table():
-    """Creates the 'products' table with a vector column if it doesn't exist."""
+    """Creates the 'products' and 'orders' tables if they don't exist."""
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(metadata.create_all, checkfirst=True)
+        
+        # Check if stock_quantity column exists, if not add it
+        result = await conn.execute(text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='products' AND column_name='stock_quantity'"
+        ))
+        if not result.fetchone():
+            print("Adding missing column 'stock_quantity' to 'products' table...")
+            await conn.execute(text("ALTER TABLE products ADD COLUMN stock_quantity INTEGER DEFAULT 0"))
 
 async def sync_data():
     """Fetches data from the API, generates embeddings, and upserts into the database."""
@@ -59,6 +82,9 @@ async def sync_data():
         for product in products:
             content_to_embed = f"{product['title']}: {product['description']}"
             vector = await embeddings.aembed_query(content_to_embed)
+            
+            # Use random stock if API doesn't provide it
+            stock = product.get('stock_quantity', random.randint(5, 50))
 
             stmt = pg_insert(products_table).values(
                 id=product['id'],
@@ -67,7 +93,8 @@ async def sync_data():
                 description=product['description'],
                 category=product['category'],
                 image=product['image'],
-                embedding=vector # Pass the list directly
+                stock_quantity=stock,
+                embedding=vector
             )
             
             upsert_stmt = stmt.on_conflict_do_update(
@@ -78,6 +105,7 @@ async def sync_data():
                     'description': stmt.excluded.description,
                     'category': stmt.excluded.category,
                     'image': stmt.excluded.image,
+                    'stock_quantity': stmt.excluded.stock_quantity,
                     'embedding': stmt.excluded.embedding,
                 }
             )
@@ -88,10 +116,22 @@ async def sync_data():
 async def get_data():
     """Retrieves all data from the 'products' table."""
     async with engine.connect() as conn:
-        result = await conn.execute(text("SELECT id, title, price, description, category, image FROM products"))
+        result = await conn.execute(text("SELECT id, title, price, description, category, image, stock_quantity FROM products"))
         products = result.fetchall()
         return [dict(zip(result.keys(), product)) for product in products]
-    print("Data retrieval complete.")
+
+async def get_orders():
+    """Retrieves all data from the 'orders' table joined with 'products'."""
+    async with engine.connect() as conn:
+        query = text("""
+            SELECT o.id, o.product_id, p.title as product_title, o.quantity, o.customer_phone, o.address, o.status, o.created_at
+            FROM orders o
+            JOIN products p ON o.product_id = p.id
+            ORDER BY o.created_at DESC
+        """)
+        result = await conn.execute(query)
+        orders = result.fetchall()
+        return [dict(zip(result.keys(), order)) for order in orders]
 
 
 if __name__ == "__main__":
