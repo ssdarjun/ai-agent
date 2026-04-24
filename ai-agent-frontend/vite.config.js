@@ -7,5 +7,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    watch: {
+      // Vite's inotify-based watcher doesn't work on Windows Docker bind mounts.
+      // Polling ensures HMR detects file changes from the Windows host.
+      usePolling: true,
+      interval: 1000,
+    },
   },
 })

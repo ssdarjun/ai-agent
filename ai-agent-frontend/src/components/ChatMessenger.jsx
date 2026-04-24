@@ -10,49 +10,83 @@ const ChatMessenger = () => {
   const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = input;
+    setMessages(prev => [...prev, { role: 'user', content: currentInput }]);
     setInput('');
     setIsLoading(true);
 
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_LITELLM_API_KEY}`
+          'Authorization': `Bearer ${import.meta.env.VITE_LITELLM_API_KEY}`,
         },
-        body: JSON.stringify({
-          query: input,
-          conversation_id: conversationId
-        }),
+        body: JSON.stringify({ query: currentInput, conversation_id: conversationId }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to connect to assistant');
+        const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(err.detail || 'Failed to connect to the assistant.');
       }
 
-      const data = await response.json();
-      
-      if (data.conversation_id) setConversationId(data.conversation_id);
-      
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.response }]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let assistantMsgAdded = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Buffer handles the case where a chunk splits an SSE line.
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          let data;
+          try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (data.token) {
+            if (!assistantMsgAdded) {
+              // First token: remove the typing indicator, add the real message.
+              setIsLoading(false);
+              setMessages(prev => [...prev, { role: 'assistant', content: data.token }]);
+              assistantMsgAdded = true;
+            } else {
+              setMessages(prev => {
+                const msgs = [...prev];
+                const last = msgs[msgs.length - 1];
+                msgs[msgs.length - 1] = { ...last, content: last.content + data.token };
+                return msgs;
+              });
+            }
+          }
+
+          if (data.error && !assistantMsgAdded) {
+            setIsLoading(false);
+            setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }]);
+            assistantMsgAdded = true;
+          }
+
+          if (data.done && data.conversation_id) {
+            setConversationId(data.conversation_id);
+          }
+        }
+      }
     } catch (error) {
       console.error('Chat error:', error);
-      setMessages((prev) => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
     } finally {
       setIsLoading(false);
     }
@@ -99,14 +133,15 @@ const ChatMessenger = () => {
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-tr-none shadow-md' 
+                  msg.role === 'user'
+                    ? 'bg-blue-600 text-white rounded-tr-none shadow-md'
                     : 'bg-white text-gray-800 rounded-tl-none border border-gray-100 shadow-sm'
                 }`}>
                   {msg.content}
                 </div>
               </div>
             ))}
+            {/* Typing indicator — shown while waiting for first token */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-white p-3 rounded-2xl rounded-tl-none border border-gray-100 shadow-sm">
