@@ -11,15 +11,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from openai import AsyncOpenAI
 
 # --- Configuration ---
-DB_USER = os.environ.get("POSTGRES_USER", "user")
-DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "password")
-DB_HOST = "host.docker.internal" 
-DB_NAME = os.environ.get("POSTGRES_DB", "vectordb")
-DATABASE_URL = os.environ.get("DATABASE_URL", f"postgresql+psycopg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}")
-
-API_URL = os.environ.get("API_URL", "https://fakestoreapi.com/products")
-LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://host.docker.internal:4000/v1")
-LITELLM_MASTER_KEY = os.environ.get("LITELLM_MASTER_KEY", "sk-my-super-secret-master-key")
+DATABASE_URL = os.environ["DATABASE_URL"]
+API_URL = os.environ["API_URL"]
+LITELLM_BASE_URL = os.environ["LITELLM_BASE_URL"]
+LITELLM_MASTER_KEY = os.environ["LITELLM_MASTER_KEY"]
 
 # --- Database & OpenAI Clients ---
 engine = create_async_engine(DATABASE_URL)

@@ -16,7 +16,7 @@ from haystack.utils import Secret
 router = APIRouter()
 security = HTTPBearer() # This forces the route to expect an Authorization header
 
-LITELLM_BASE_URL = os.environ.get("LITELLM_BASE_URL", "http://host.docker.internal:4000/v1")
+LITELLM_BASE_URL = os.environ["LITELLM_BASE_URL"]
 
 # --- Tool Implementations ---
 async def check_stock(product_id: int):
