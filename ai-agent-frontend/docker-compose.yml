@@ -1,0 +1,13 @@
+services:
+  frontend:
+    build:
+      context: .
+    container_name: ai_agent_frontend
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    restart: unless-stopped
