@@ -11,6 +11,7 @@ from data_sync import engine, orders_table, openai_client
 # Haystack imports
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
+from haystack.tools import Tool
 from haystack.utils import Secret
 
 router = APIRouter()
@@ -51,36 +52,37 @@ async def create_order(product_id: int, quantity: int, customer_phone: str, addr
         return {"status": "error", "message": str(e)}
 
 # --- Tool Definitions ---
+# Note: Haystack 2.x Tools require synchronous functions for now. 
+# We use a dummy function here because we handle the async execution manually in the chat route.
+def dummy_func():
+    pass
+
 tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "check_stock",
-            "description": "Checks the stock for a given product ID.",
-            "parameters": {
-                "type": "object",
-                "properties": {"product_id": {"type": "integer"}},
-                "required": ["product_id"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "create_order",
-            "description": "Creates an order for a given product.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "product_id": {"type": "integer"},
-                    "quantity": {"type": "integer"},
-                    "customer_phone": {"type": "string"},
-                    "address": {"type": "string"}
-                },
-                "required": ["product_id", "quantity", "customer_phone", "address"]
-            }
-        }
-    }
+    Tool(
+        name="check_stock",
+        description="Checks the stock for a given product ID.",
+        parameters={
+            "type": "object",
+            "properties": {"product_id": {"type": "integer"}},
+            "required": ["product_id"]
+        },
+        function=dummy_func
+    ),
+    Tool(
+        name="create_order",
+        description="Creates an order for a given product.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "product_id": {"type": "integer"},
+                "quantity": {"type": "integer"},
+                "customer_phone": {"type": "string"},
+                "address": {"type": "string"}
+            },
+            "required": ["product_id", "quantity", "customer_phone", "address"]
+        },
+        function=dummy_func
+    )
 ]
 
 # Simple in-memory storage for conversations
@@ -144,28 +146,51 @@ async def chat(
         response = llm.run(messages=conversation_memory[conv_id], tools=tools)
         reply = response["replies"][0]
 
-        # 6. Handle Tool Calls gracefully
-        if reply.tool_calls:
+        # 6. Handle Tool Calls gracefully (Loop until LLM stops calling tools)
+        max_turns = 3
+        turn = 0
+        executed_calls = set()
+        
+        while turn < max_turns:
+            print(f"--- Turn {turn} ---")
+            print(f"Tool calls: {reply.tool_calls}")
+            
+            if not reply.tool_calls:
+                break
+                
             conversation_memory[conv_id].append(reply)
             
             for call in reply.tool_calls:
+                # Create a unique key for this call to detect loops
+                call_key = f"{call.tool_name}:{json.dumps(call.arguments, sort_keys=True)}"
+                if call_key in executed_calls:
+                    print(f"Loop detected for {call_key}, stopping tools.")
+                    # Add a system message to force the LLM to respond
+                    conversation_memory[conv_id].append(ChatMessage.from_system("You already called this tool with these arguments. Please provide a final answer based on the results already provided."))
+                    break
+                
+                executed_calls.add(call_key)
+                print(f"Executing tool: {call.tool_name} with {call.arguments}")
+                
                 if call.tool_name == "check_stock":
                     res = await check_stock(**call.arguments)
-                    conversation_memory[conv_id].append(ChatMessage.from_tool(json.dumps(res), origin=call))
+                    # Verbose result for the LLM
+                    result_text = f"Tool Result for {call.tool_name}: Product ID {res['product_id']} has {res['stock']} items in stock."
+                    conversation_memory[conv_id].append(ChatMessage.from_tool(result_text, origin=call))
                 elif call.tool_name == "create_order":
                     res = await create_order(**call.arguments)
-                    conversation_memory[conv_id].append(ChatMessage.from_tool(json.dumps(res), origin=call))
+                    result_text = f"Tool Result for {call.tool_name}: {json.dumps(res)}"
+                    conversation_memory[conv_id].append(ChatMessage.from_tool(result_text, origin=call))
             
-            # Get final response after tool execution
-            final_response = llm.run(messages=conversation_memory[conv_id], tools=tools)
-            final_reply = final_response["replies"][0]
-            conversation_memory[conv_id].append(final_reply)
-            
-            return {"response": final_reply.content, "conversation_id": conv_id}
-            
-        # 7. Normal chat response
+            # Get next response from LLM
+            response = llm.run(messages=conversation_memory[conv_id], tools=tools)
+            reply = response["replies"][0]
+            turn += 1
+
+        # 7. Final response
+        print(f"Final Reply: {reply}")
         conversation_memory[conv_id].append(reply)
-        return {"response": reply.content, "conversation_id": conv_id}
+        return {"response": reply.text, "conversation_id": conv_id}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

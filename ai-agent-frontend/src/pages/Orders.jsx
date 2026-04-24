@@ -5,7 +5,7 @@ function Orders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:8000/orders')
+    fetch(`${import.meta.env.VITE_API_URL}/orders`)
       .then((response) => response.json())
       .then((data) => {
         setOrders(data.orders);
