@@ -1,1 +1,18 @@
-app/__pycache__
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+build/
+
+# Environments
+.env
+
+# OS
+.DS_Store
+Thumbs.db
