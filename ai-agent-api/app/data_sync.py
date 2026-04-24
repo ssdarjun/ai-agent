@@ -22,7 +22,12 @@ openai_client = AsyncOpenAI(api_key=LITELLM_MASTER_KEY, base_url=LITELLM_BASE_UR
 
 @event.listens_for(engine.sync_engine, "connect")
 def _sqla_on_connect(dbapi_connection, connection_record):
-    dbapi_connection.run_async(register_vector_async)
+    try:
+        dbapi_connection.run_async(register_vector_async)
+    except Exception:
+        # Ignore error if vector extension is not yet installed
+        # It will be registered on subsequent connections after create_table() runs
+        pass
 
 # --- Schema ---
 metadata = MetaData()

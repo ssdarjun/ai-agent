@@ -6,6 +6,10 @@ from chat import router as chat_router
 # --- FastAPI App Initialization ---
 app = FastAPI()
 
+@app.on_event("startup")
+async def on_startup():
+    await create_table()
+
 # --- CORS Middleware ---
 # This is to allow the frontend to make requests to the backend.
 # For production, it's better to restrict the origins to the frontend's domain.
