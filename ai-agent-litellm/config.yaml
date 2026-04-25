@@ -1,18 +1,58 @@
+# =============================================================================
+# LiteLLM Model Config
+# =============================================================================
+#
+# HOW TO ADD A NEW MODEL
+# ──────────────────────
+# 1. Copy the TEMPLATE block at the bottom of this file into model_list
+# 2. Add the matching VLLM_NEWMODEL_* vars to .env
+# 3. Restart LiteLLM: docker compose restart
+# =============================================================================
+
 model_list:
+
+  # ── Chat Model: Qwen (vLLM port 8000) ─────────────────────────────────────
   - model_name: os.environ/QWEN_MODEL_NAME
     litellm_params:
-      model: os.environ/OLLAMA_MODEL
-      api_base: os.environ/OLLAMA_API_BASE
+      model: os.environ/VLLM_CHAT_MODEL
+      api_base: os.environ/VLLM_API_BASE
+      api_key: os.environ/VLLM_API_KEY
+
+  # ── Embedding Model: nomic-embed-text (vLLM port 8001) ────────────────────
   - model_name: os.environ/EMBEDDINGS_MODEL_NAME
     litellm_params:
-      model: os.environ/OLLAMA_EMBEDDING_MODEL
-      api_base: os.environ/OLLAMA_API_BASE
+      model: os.environ/VLLM_EMBED_MODEL
+      api_base: os.environ/VLLM_EMBED_API_BASE
+      api_key: os.environ/VLLM_API_KEY
       drop_params: true
     model_info:
       mode: embedding
+
+  # =============================================================================
+  # TEMPLATE — copy this block above and fill in the blanks to add a new model
+  # =============================================================================
+  #
+  # Chat model template:
+  # - model_name: os.environ/NEWMODEL_MODEL_NAME        ← name your API clients use
+  #   litellm_params:
+  #     model: os.environ/VLLM_NEWMODEL_MODEL           ← openai/<alias>
+  #     api_base: os.environ/VLLM_NEWMODEL_API_BASE     ← http://host.docker.internal:80XX/v1
+  #     api_key: os.environ/VLLM_API_KEY
+  #
+  # Embedding model template (add model_info block):
+  # - model_name: os.environ/NEWMODEL_MODEL_NAME
+  #   litellm_params:
+  #     model: os.environ/VLLM_NEWMODEL_MODEL
+  #     api_base: os.environ/VLLM_NEWMODEL_API_BASE
+  #     api_key: os.environ/VLLM_API_KEY
+  #     drop_params: true
+  #   model_info:
+  #     mode: embedding
+  # =============================================================================
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
 
 litellm_settings:
   drop_params: true
+  request_timeout: 120

@@ -1,0 +1,101 @@
+# =============================================================================
+# vLLM Model Manager - docker-compose.yml
+# =============================================================================
+#
+# HOW TO ADD A NEW MODEL
+# ──────────────────────
+# 1. Copy the template block at the bottom of this file into the services section
+# 2. Replace NEWMODEL with your model's short name (e.g. mistral, llama, phi3)
+# 3. Pick the next free port (increment by 1 from the last model port)
+# 4. Set the right --task flag: omit for chat, or "--task embedding" for embed
+# 5. Add the model's env vars to .env  (copy the TEMPLATE section at the bottom)
+# 6. Add the model to ai-agent-litellm/config.yaml and .env
+# 7. Run:  .\manage.ps1 start <profile-name>
+# =============================================================================
+
+# Shared config reused by every vLLM service (YAML anchor)
+x-vllm-defaults: &vllm-defaults
+  image: vllm/vllm-openai:latest
+  volumes:
+    - vllm_model_cache:/root/.cache/huggingface
+  environment:
+    HF_HOME: /root/.cache/huggingface
+    HUGGING_FACE_HUB_TOKEN: "${HF_TOKEN:-}"
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+  healthcheck:
+    test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 120s
+  restart: unless-stopped
+
+# =============================================================================
+# MODELS
+# =============================================================================
+services:
+
+  # ── Chat Model: Qwen2.5-7B-Instruct ─────────────────────────────────────
+  # Profile: qwen | Port: 8000
+  vllm-qwen:
+    <<: *vllm-defaults
+    profiles: [qwen, all]
+    container_name: ai_agent_vllm_qwen
+    ports:
+      - "${VLLM_QWEN_PORT:-8000}:8000"
+    command: >
+      --model ${VLLM_QWEN_MODEL}
+      --served-model-name ${VLLM_QWEN_ALIAS}
+      --host 0.0.0.0
+      --port 8000
+      --trust-remote-code
+      --max-model-len ${VLLM_QWEN_MAX_LEN:-8192}
+      --gpu-memory-utilization ${VLLM_QWEN_GPU_MEM:-0.65}
+
+  # ── Embedding Model: nomic-embed-text-v1 ────────────────────────────────
+  # Profile: embed | Port: 8001
+  vllm-embed:
+    <<: *vllm-defaults
+    profiles: [embed, all]
+    container_name: ai_agent_vllm_embed
+    ports:
+      - "${VLLM_EMBED_PORT:-8001}:8000"
+    command: >
+      --model ${VLLM_EMBED_MODEL}
+      --served-model-name ${VLLM_EMBED_ALIAS}
+      --task embedding
+      --host 0.0.0.0
+      --port 8000
+      --trust-remote-code
+      --gpu-memory-utilization ${VLLM_EMBED_GPU_MEM:-0.25}
+
+  # =============================================================================
+  # ADD NEW MODEL BELOW — copy this block and fill in the blanks
+  # =============================================================================
+  #
+  # vllm-NEWMODEL:
+  #   <<: *vllm-defaults
+  #   profiles: [NEWMODEL, all]
+  #   container_name: ai_agent_vllm_NEWMODEL
+  #   ports:
+  #     - "${VLLM_NEWMODEL_PORT:-80XX}:8000"   ← pick the next free port
+  #   command: >
+  #     --model ${VLLM_NEWMODEL_MODEL}          ← HuggingFace model ID
+  #     --served-model-name ${VLLM_NEWMODEL_ALIAS}
+  #     --host 0.0.0.0
+  #     --port 8000
+  #     --trust-remote-code
+  #     --max-model-len ${VLLM_NEWMODEL_MAX_LEN:-4096}
+  #     --gpu-memory-utilization ${VLLM_NEWMODEL_GPU_MEM:-0.50}
+  #     # For embedding models, add: --task embedding
+  # =============================================================================
+
+volumes:
+  vllm_model_cache:
+    driver: local
