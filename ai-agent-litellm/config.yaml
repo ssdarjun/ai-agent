@@ -11,14 +11,25 @@
 
 model_list:
 
-  # ── Chat Model: Qwen (vLLM port 8000) ─────────────────────────────────────
+  # ── Chat + Document Generation: Qwen2.5-7B (vLLM port 8000) ──────────────
+  # Use for: SOP writing, recommendation letters, structured text generation
   - model_name: os.environ/QWEN_MODEL_NAME
     litellm_params:
       model: os.environ/VLLM_CHAT_MODEL
       api_base: os.environ/VLLM_API_BASE
       api_key: os.environ/VLLM_API_KEY
 
-  # ── Embedding Model: nomic-embed-text (vLLM port 8001) ────────────────────
+  # ── Vision + OCR: Qwen2.5-VL-7B (vLLM port 8002) ────────────────────────
+  # Use for: Passport / ID card scanning, extracting fields from images & PDFs
+  # API: same as chat/completions but include image_url in messages content
+  - model_name: os.environ/VISION_MODEL_NAME
+    litellm_params:
+      model: os.environ/VLLM_VISION_MODEL
+      api_base: os.environ/VLLM_VISION_API_BASE
+      api_key: os.environ/VLLM_API_KEY
+
+  # ── Embedding Model: nomic-embed-text (vLLM port 8001) ───────────────────
+  # Use for: Semantic search over student profiles, document similarity
   - model_name: os.environ/EMBEDDINGS_MODEL_NAME
     litellm_params:
       model: os.environ/VLLM_EMBED_MODEL
@@ -29,17 +40,17 @@ model_list:
       mode: embedding
 
   # =============================================================================
-  # TEMPLATE — copy this block above and fill in the blanks to add a new model
+  # TEMPLATE — copy this block above to add a new model
   # =============================================================================
   #
-  # Chat model template:
-  # - model_name: os.environ/NEWMODEL_MODEL_NAME        ← name your API clients use
+  # Chat / Vision model:
+  # - model_name: os.environ/NEWMODEL_MODEL_NAME
   #   litellm_params:
-  #     model: os.environ/VLLM_NEWMODEL_MODEL           ← openai/<alias>
-  #     api_base: os.environ/VLLM_NEWMODEL_API_BASE     ← http://host.docker.internal:80XX/v1
+  #     model: os.environ/VLLM_NEWMODEL_MODEL          ← openai/<alias>
+  #     api_base: os.environ/VLLM_NEWMODEL_API_BASE    ← http://host.docker.internal:80XX/v1
   #     api_key: os.environ/VLLM_API_KEY
   #
-  # Embedding model template (add model_info block):
+  # Embedding model (add model_info block):
   # - model_name: os.environ/NEWMODEL_MODEL_NAME
   #   litellm_params:
   #     model: os.environ/VLLM_NEWMODEL_MODEL

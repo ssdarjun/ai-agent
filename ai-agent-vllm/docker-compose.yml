@@ -4,13 +4,14 @@
 #
 # HOW TO ADD A NEW MODEL
 # ──────────────────────
-# 1. Copy the template block at the bottom of this file into the services section
+# 1. Copy the TEMPLATE block at the bottom into the services section
 # 2. Replace NEWMODEL with your model's short name (e.g. mistral, llama, phi3)
-# 3. Pick the next free port (increment by 1 from the last model port)
-# 4. Set the right --task flag: omit for chat, or "--task embedding" for embed
-# 5. Add the model's env vars to .env  (copy the TEMPLATE section at the bottom)
+# 3. Pick the next free port (increment by 1 from last used)
+# 4. Set --task embedding for embedding models, omit for chat/vision
+# 5. Add the model's env vars to .env (copy the TEMPLATE section there too)
 # 6. Add the model to ai-agent-litellm/config.yaml and .env
-# 7. Run:  .\manage.ps1 start <profile-name>
+# 7. Add one line to manage.ps1's $models array
+# 8. Run: .\manage.ps1 start <profile-name>
 # =============================================================================
 
 # Shared config reused by every vLLM service (YAML anchor)
@@ -41,7 +42,8 @@ x-vllm-defaults: &vllm-defaults
 # =============================================================================
 services:
 
-  # ── Chat Model: Qwen2.5-7B-Instruct ─────────────────────────────────────
+  # ── Chat + Document Generation: Qwen2.5-7B-Instruct ──────────────────────
+  # Use for: SOP writing, recommendation letters, reports, Q&A chat
   # Profile: qwen | Port: 8000
   vllm-qwen:
     <<: *vllm-defaults
@@ -56,9 +58,30 @@ services:
       --port 8000
       --trust-remote-code
       --max-model-len ${VLLM_QWEN_MAX_LEN:-8192}
-      --gpu-memory-utilization ${VLLM_QWEN_GPU_MEM:-0.65}
+      --gpu-memory-utilization ${VLLM_QWEN_GPU_MEM:-0.40}
 
-  # ── Embedding Model: nomic-embed-text-v1 ────────────────────────────────
+  # ── Vision + OCR: Qwen2.5-VL-7B-Instruct ────────────────────────────────
+  # Use for: Passport scanning, ID card OCR, extracting fields from uploaded images/PDFs
+  # Accepts image URLs or base64-encoded images in the messages array
+  # Profile: vision | Port: 8002
+  vllm-vision:
+    <<: *vllm-defaults
+    profiles: [vision, all]
+    container_name: ai_agent_vllm_vision
+    ports:
+      - "${VLLM_VISION_PORT:-8002}:8000"
+    command: >
+      --model ${VLLM_VISION_MODEL}
+      --served-model-name ${VLLM_VISION_ALIAS}
+      --host 0.0.0.0
+      --port 8000
+      --trust-remote-code
+      --max-model-len ${VLLM_VISION_MAX_LEN:-4096}
+      --gpu-memory-utilization ${VLLM_VISION_GPU_MEM:-0.45}
+      --limit-mm-per-prompt image=${VLLM_VISION_MAX_IMAGES:-5}
+
+  # ── Embedding Model: nomic-embed-text-v1 ─────────────────────────────────
+  # Use for: Semantic search over student profiles, similar document retrieval
   # Profile: embed | Port: 8001
   vllm-embed:
     <<: *vllm-defaults
@@ -73,7 +96,7 @@ services:
       --host 0.0.0.0
       --port 8000
       --trust-remote-code
-      --gpu-memory-utilization ${VLLM_EMBED_GPU_MEM:-0.25}
+      --gpu-memory-utilization ${VLLM_EMBED_GPU_MEM:-0.10}
 
   # =============================================================================
   # ADD NEW MODEL BELOW — copy this block and fill in the blanks
@@ -93,7 +116,8 @@ services:
   #     --trust-remote-code
   #     --max-model-len ${VLLM_NEWMODEL_MAX_LEN:-4096}
   #     --gpu-memory-utilization ${VLLM_NEWMODEL_GPU_MEM:-0.50}
-  #     # For embedding models, add: --task embedding
+  #     # For embedding models add:  --task embedding
+  #     # For vision models add:     --limit-mm-per-prompt image=5
   # =============================================================================
 
 volumes:

@@ -31,11 +31,11 @@ param(
 # Keep this list in sync with docker-compose.yml profiles and .env ports.
 # When you add a new model, append an entry here.
 $models = @(
-    [PSCustomObject]@{ Profile = "qwen";  Name = "Qwen2.5-7B-Instruct";  Task = "chat";      Port = 8000 },
-    [PSCustomObject]@{ Profile = "embed"; Name = "nomic-embed-text-v1";   Task = "embedding"; Port = 8001 }
+    [PSCustomObject]@{ Profile = "qwen";    Name = "Qwen2.5-7B-Instruct";    Task = "chat";      Port = 8000; Use = "SOP / letter / report generation" },
+    [PSCustomObject]@{ Profile = "embed";   Name = "nomic-embed-text-v1";    Task = "embedding"; Port = 8001; Use = "Semantic search, profile similarity" },
+    [PSCustomObject]@{ Profile = "vision";  Name = "Qwen2.5-VL-7B-Instruct"; Task = "vision";    Port = 8002; Use = "Passport / ID card OCR, image extraction" }
     # ── ADD NEW MODELS HERE ────────────────────────────────────────────────
-    # [PSCustomObject]@{ Profile = "mistral"; Name = "Mistral-7B-Instruct"; Task = "chat"; Port = 8002 },
-    # [PSCustomObject]@{ Profile = "phi3";    Name = "Phi-3-mini-4k";       Task = "chat"; Port = 8003 },
+    # [PSCustomObject]@{ Profile = "mistral"; Name = "Mistral-7B-Instruct"; Task = "chat"; Port = 8003; Use = "..." },
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -60,7 +60,8 @@ switch ($Command) {
             @{L = "Profile"; E = { $_.Profile }},
             @{L = "Model";   E = { $_.Name }},
             @{L = "Task";    E = { $_.Task }},
-            @{L = "Port";    E = { $_.Port }}
+            @{L = "Port";    E = { $_.Port }},
+            @{L = "Use Case"; E = { $_.Use }}
         Write-Host "  Use 'all' to start/stop every model at once.`n" -ForegroundColor Yellow
     }
 
